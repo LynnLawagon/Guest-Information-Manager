@@ -1,91 +1,43 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Guest Data OCR</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f4f6fa" />
+  <title>New Guest | Guest Information Manager</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
 </head>
 <body>
-
-<div class="hero">
-
-  <div id="drop-area">
-    <input type="file" id="input-file" accept="image/*,.pdf" style="display:none;" />
-
-    <div id="img-view">
-      <div class="media-box">
-        <img id="preview-img" src="{{ url_for('static', filename='img/upload.png') }}" alt="Preview"/>
-        <video id="camera" autoplay playsinline></video>
-
-        <button id="snap-btn" type="button" aria-label="Snap Photo">
-          <img src="{{ url_for('static', filename='img/camera.png') }}" alt="Camera">
-        </button>
-
-        <div id="loading-indicator">Scanning...</div>
-      </div>
-
-      <p id="drop-text">Upload your ID here</p>
-      <span>Supports School ID / National ID (Primary)</span>
+<header class="app-header"><div class="brand"><span class="brand-mark">G</span>Guest Information Manager</div><nav class="header-links"><a href="/records">Saved records</a><a href="/">Home</a></nav></header>
+<div class="page-heading"><p class="eyebrow">GUEST INTAKE</p><h1>Scan and register a guest</h1><p>Capture an ID, review the extracted details, and save a record on this device.</p></div>
+<main class="workspace">
+  <section class="panel"><div class="panel-head"><h2>ID capture</h2><p>Upload an image or use your device camera.</p></div><div class="capture-body">
+    <input type="file" id="input-file" accept="image/*,.pdf" hidden />
+    <div id="img-view"><div class="media-box"><img id="preview-img" src="{{ url_for('static', filename='img/upload.png') }}" alt="ID preview"/><video id="camera" autoplay playsinline></video><button id="snap-btn" type="button" aria-label="Capture photo"><img src="{{ url_for('static', filename='img/camera.png') }}" alt=""></button><div id="loading-indicator">Processing ID…</div></div><p class="drop-title" id="drop-text">Choose an ID image or PDF</p><p class="drop-hint">JPG, PNG, WEBP, or PDF · Keep the ID clear and well lit</p></div>
+    <div class="capture-actions"><button class="button button-primary" id="toggle-btn" type="button">Use camera</button><button class="button button-soft" id="retry-btn" type="button" disabled>Retry scan</button></div>
+    <p class="privacy-hint">Camera access is requested only when you choose to use it. Review all extracted information before saving.</p>
+  </div></section>
+  <section class="panel"><div class="panel-head"><h2>Guest information</h2><p>Check and correct the details before saving.</p></div><div class="form-body">
+    <div class="status-grid"><div class="form-group"><label for="ref-id">Reference number</label><input id="ref-id" readonly placeholder="Generated after scan"></div><div class="form-group"><label for="age">Age</label><input id="age" readonly placeholder="Auto-calculated"></div></div>
+    <input type="hidden" id="id-slot" value="primary"><input type="hidden" id="id-category" value="PRIMARY">
+    <div class="field-grid">
+      <div class="form-group"><label for="can-proceed">ID scan status</label><input id="can-proceed" class="readonly-status" readonly placeholder="Awaiting scan"></div>
+      <div class="form-group"><label for="id-type">ID type</label><input id="id-type" placeholder="Detected ID type"></div>
+      <div class="form-group full"><label for="id-no">ID number</label><input id="id-no" placeholder="Enter ID number"></div>
     </div>
-
-    <div class="top-actions">
-      <button class="records-btn" type="button" onclick="window.location.href='/records'">
-        View Saved PDFs
-      </button>
-
-      <button id="back-home-btn" class="back-home-btn" type="button" onclick="window.location.href='/'">
-        Back to Home
-      </button>
+    <hr class="form-divider"><p class="form-section-title">Personal details</p>
+    <div class="field-grid">
+      <div class="form-group"><label for="first-name">First name *</label><input id="first-name" autocomplete="given-name" placeholder="First name"></div>
+      <div class="form-group"><label for="middle-name">Middle name</label><input id="middle-name" autocomplete="additional-name" placeholder="Middle name"></div>
+      <div class="form-group"><label for="last-name">Last name *</label><input id="last-name" autocomplete="family-name" placeholder="Last name"></div>
+      <div class="form-group"><label for="dob">Date of birth *</label><input id="dob" type="date" autocomplete="bday"></div>
+      <div class="form-group"><label for="gender_id">Gender *</label><select id="gender_id"><option value="">Select gender</option><option value="1">Male</option><option value="2">Female</option><option value="3">Prefer not to say</option></select></div>
+      <div class="form-group"><label for="contact">Contact number</label><input id="contact" inputmode="numeric" maxlength="11" autocomplete="tel" placeholder="09XXXXXXXXX"></div>
+      <div class="form-group full"><label for="address">Address *</label><input id="address" autocomplete="street-address" placeholder="House number, street, barangay, city"></div>
     </div>
-  </div>
-
-  <div id="ocr-results">
-    <h2>Results</h2>
-
-    <div class="form-group"><label>Reference ID:</label><input id="ref-id" readonly /></div>
-    <div class="form-group"><label>Age:</label><input id="age" readonly /></div>
-
-    <input type="hidden" id="id-slot" value="primary">
-    <input type="hidden" id="id-category" value="PRIMARY">
-
-    <div class="form-group"><label>Can Proceed:</label><input id="can-proceed" readonly /></div>
-
-    <div class="form-group"><label>ID Type:</label><input id="id-type" readonly/></div>
-    <div class="form-group"><label>ID Number:</label><input id="id-no"/></div>
-
-    <div class="form-group"><label>First Name:</label><input id="first-name"/></div>
-    <div class="form-group"><label>Middle Name:</label><input id="middle-name"/></div>
-    <div class="form-group"><label>Last Name:</label><input id="last-name"/></div>
-
-    <div class="form-group"><label>Date of Birth:</label><input id="dob" type="text" placeholder="YYYY-MM-DD"/></div>
-
-    <div class="form-group">
-      <label>Gender:</label>
-      <select id="gender_id"></select>
-    </div>
-
-    <div class="form-group">
-      <label>Contact:</label>
-      <input id="contact" inputmode="numeric" maxlength="11" placeholder="09XXXXXXXXX"/>
-    </div>
-
-    <div class="form-group"><label>Address:</label><input id="address"/></div>
-
-    <div class="btn-row">
-      <button id="toggle-btn" type="button">Use Camera</button>
-      <button id="recalc-btn" type="button">Recalculate Age</button>
-      <button id="retry-btn" type="button">Retry</button>
-      <button id="export-btn" type="button" disabled>Save</button>
-      <button id="new-guest-btn" type="button">New Guest</button>
-    </div>
-  </div>
-
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
-<script src="{{ url_for('static', filename='script.js') }}"></script>
-
-</body>
-</html>
+    <div class="form-actions"><button class="button button-soft" id="recalc-btn" type="button">Recalculate age</button><button class="button button-primary" id="export-btn" type="button" disabled>Save record & download PDF</button><button class="button" id="new-guest-btn" type="button">Clear form</button></div>
+    <p class="privacy-hint">* Required fields. Saved records stay in this browser's LocalStorage and are not automatically synced to your other devices.</p>
+  </div></section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script><script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script><script src="{{ url_for('static', filename='script.js') }}"></script>
+</body></html>

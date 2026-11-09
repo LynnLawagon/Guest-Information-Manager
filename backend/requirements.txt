@@ -5,8 +5,5 @@ numpy
 reportlab
 pillow
 pymupdf
-supabase
-python-dotenv
-gunicorn
 torch
 torchvision

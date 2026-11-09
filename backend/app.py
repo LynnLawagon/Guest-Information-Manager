@@ -7,8 +7,6 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 
-from dotenv import load_dotenv
-from db import get_supabase
 
 import os
 import re
@@ -20,7 +18,6 @@ import numpy as np
 from datetime import datetime, date
 import easyocr
 
-load_dotenv()
 
 app = Flask(__name__, template_folder="templates")
 
@@ -56,47 +53,15 @@ def home():
 def scan_page():
     return render_template("index.html")
 
-# DB TEST
-@app.route("/test-db")
-def test_db():
-    try:
-        supabase = get_supabase()
-        res = (
-            supabase.table("tbl_guests")
-            .select("reference_id, reference_code, first_name, last_name, created_at")
-            .order("reference_id", desc=True)
-            .limit(10)
-            .execute()
-        )
-        return jsonify({"ok": True, "rows": res.data or []})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-# genders list from tbl_gender
+# LocalStorage is the source of truth for saved guest records.
+# The backend only performs OCR and PDF generation; it does not store guest data.
 @app.route("/meta/genders", methods=["GET"])
 def meta_genders():
-    try:
-        supabase = get_supabase()
-        res = (
-            supabase.table("tbl_gender")
-            .select("gender_id, gender_name")
-            .order("gender_id")
-            .execute()
-        )
-
-        rows = [
-            {
-                "Gender_id": row["gender_id"],
-                "gender_name": row["gender_name"]
-            }
-            for row in (res.data or [])
-        ]
-        return jsonify(rows), 200
-
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"error": "Failed to load genders", "details": str(e)}), 500
+    return jsonify([
+        {"Gender_id": 1, "gender_name": "Male"},
+        {"Gender_id": 2, "gender_name": "Female"},
+        {"Gender_id": 3, "gender_name": "Prefer not to say"},
+    ]), 200
 
 
 # HELPERS
@@ -115,30 +80,9 @@ def is_valid_contact_11(contact: str) -> bool:
 
 
 def gender_exists(gender_id):
-    if gender_id is None:
-        return None
-
-    s = str(gender_id).strip()
-    if not s:
-        return None
-
-    supabase = get_supabase()
-    res = (
-        supabase.table("tbl_gender")
-        .select("gender_id, gender_name")
-        .eq("gender_id", int(s))
-        .limit(1)
-        .execute()
-    )
-
-    if not res.data:
-        return None
-
-    row = res.data[0]
-    return {
-        "Gender_id": row["gender_id"],
-        "gender_name": row["gender_name"]
-    }
+    values = {"1": "Male", "2": "Female", "3": "Prefer not to say"}
+    name = values.get(str(gender_id or ""))
+    return {"Gender_id": int(gender_id), "gender_name": name} if name else None
 
 
 def normalize_dob(dob_str: str):
@@ -218,21 +162,7 @@ def generate_ref_code():
 
 
 def ensure_unique_ref_code():
-    supabase = get_supabase()
-
-    for _ in range(20):
-        code = generate_ref_code()
-        res = (
-            supabase.table("tbl_guests")
-            .select("reference_code")
-            .eq("reference_code", code)
-            .limit(1)
-            .execute()
-        )
-        if not res.data:
-            return code
-
-    return f"REF-{datetime.now().year}{random.randint(100000, 999999)}"
+    return f"REF-{datetime.now().strftime('%Y%m%d')}-{random.randint(1000, 9999)}"
 
 # OCR + PARSING
 STOPWORDS = {
@@ -639,92 +569,21 @@ def upload():
         traceback.print_exc()
         return json_error("Server error while scanning", 500, details=str(e))
 
-# SAVE GUEST (DB)
+# SAVE GUEST: acknowledge validated client-side LocalStorage save.
 @app.route("/save-guest", methods=["POST"])
 def save_guest():
-    try:
-        payload = request.get_json(silent=True) or {}
-        ref_code = payload.get("reference_id") or payload.get("Reference_code") or payload.get("Reference_id")
-
-        if not ref_code:
-            return json_error("Missing reference_id", 400)
-
-        record = RECORDS.get(str(ref_code))
-        if not record:
-            return json_error("No record found for that Reference ID.", 404)
-
-        apply_manual_overrides(record, payload)
-        guest = record.get("Guest") or {}
-
-        if not guest.get("ID_type"):
-            return json_error("ID Type is required.", 400)
-        if not guest.get("First_name"):
-            return json_error("First Name is required.", 400)
-        if not guest.get("Last_name"):
-            return json_error("Last Name is required.", 400)
-
-        dob_norm = normalize_dob(guest.get("Date_of_birth") or "")
-        if not dob_norm:
-            return json_error("Date of birth must be valid (YYYY-MM-DD).", 400)
-        guest["Date_of_birth"] = dob_norm
-        guest["Age"] = compute_age(dob_norm)
-
-        addr = (guest.get("Address") or "").strip()
-        if not addr:
-            return json_error("Address is required.", 400)
-
-        img_rel = (record.get("Img_path") or "").strip()
-        if not img_rel:
-            return json_error("Image path missing. Please rescan.", 400)
-
-        contact = normalize_contact(guest.get("Contact", ""))
-        if contact and not is_valid_contact_11(contact):
-            return json_error("Contact must be exactly 11 digits.", 400)
-        guest["Contact"] = contact
-
-        row = gender_exists(payload.get("Gender_id"))
-        if not row:
-            return json_error("Please select Gender from the list.", 400)
-
-        supabase = get_supabase()
-
-        insert_payload = {
-            "id_num": guest.get("ID_num"),
-            "reference_code": str(ref_code),
-            "id_type": guest.get("ID_type", ""),
-            "id_no": guest.get("ID_no") or None,
-            "first_name": guest.get("First_name", ""),
-            "middle_name": guest.get("Middle_name") or None,
-            "last_name": guest.get("Last_name", ""),
-            "date_of_birth": guest.get("Date_of_birth"),
-            "age": guest.get("Age"),
-            "can_proceed": True,
-            "gender_id": int(row["Gender_id"]),
-            "contact": guest.get("Contact") or None,
-            "address": addr,
-            "img_path": img_rel
-        }
-
-        res = (
-            supabase.table("tbl_guests")
-            .insert(insert_payload)
-            .execute()
-        )
-
-        if not res.data:
-            return json_error("Insert failed", 500)
-
-        saved = res.data[0]
-
-        return jsonify({
-            "ok": True,
-            "reference_code": saved["reference_code"],
-            "reference_id": saved["reference_id"]
-        }), 200
-
-    except Exception as e:
-        traceback.print_exc()
-        return json_error("DB save failed", 500, details=str(e))
+    payload = request.get_json(silent=True) or {}
+    required = ["reference_id", "First_name", "Last_name", "ID_type", "Date_of_birth", "Address", "gender_name"]
+    missing = [key for key in required if not str(payload.get(key) or "").strip()]
+    if missing:
+        return json_error("Please complete the required fields.", 400, fields=missing)
+    dob = normalize_dob(payload.get("Date_of_birth"))
+    if not dob:
+        return json_error("Date of birth must be valid (YYYY-MM-DD).", 400)
+    contact = normalize_contact(payload.get("Contact", ""))
+    if contact and not is_valid_contact_11(contact):
+        return json_error("Contact must be exactly 11 digits.", 400)
+    return jsonify({"ok": True, "reference_code": payload["reference_id"]}), 200
 
 # PDF EXPORT
 @app.route("/export-pdf", methods=["POST"])
@@ -737,15 +596,24 @@ def export_pdf():
 
         record = RECORDS.get(str(ref_code))
         if not record:
-            return json_error("No record found for that Reference ID.", 404)
-
+            record = {
+                "Reference_code": str(ref_code),
+                "Guest": {},
+                "Img_path": "",
+                "Can_proceed": True,
+                "ID_category": "PRIMARY",
+            }
+            RECORDS[str(ref_code)] = record
         apply_manual_overrides(record, payload)
         guest = record.get("Guest") or {}
 
         guest["Date_of_birth"] = normalize_dob(guest.get("Date_of_birth") or "") or (guest.get("Date_of_birth") or "")
         guest["Age"] = compute_age(guest.get("Date_of_birth") or "")
 
-        filename = f"{ref_code}.pdf"
+        safe_ref_code = secure_filename(str(ref_code))
+        if not safe_ref_code:
+            return json_error("Invalid reference number", 400)
+        filename = f"{safe_ref_code}.pdf"
         pdf_path = os.path.join(PDF_FOLDER, filename)
 
         c = canvas.Canvas(pdf_path, pagesize=A4)
@@ -755,20 +623,10 @@ def export_pdf():
         header_top = h - margin
         header_bottom = h - 120
 
-        logo_path = os.path.join(app.root_path, "static", "img", "logo.png")
-        logo_x = margin
-        logo_y = header_top - 35
-
-        if os.path.exists(logo_path):
-            try:
-                c.drawImage(ImageReader(logo_path), logo_x, logo_y, width=90, height=30, mask="auto")
-            except Exception:
-                pass
-
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(margin, header_top - 24, "GUEST INFORMATION RECORD")
         c.setFont("Helvetica", 9)
         right_x = w - margin
-        c.drawRightString(right_x, header_top - 10, "115 Pelayo St, Poblacion District, Davao City, 8000 Davao del Sur")
-        c.drawRightString(right_x, header_top - 25, "096 456 8920")
 
         c.setFont("Helvetica-Bold", 9)
         c.drawRightString(right_x, header_top - 45, f"{ref_code}")
@@ -861,7 +719,7 @@ def export_pdf():
             y_addr -= gap
 
         c.setFont("Helvetica-Oblique", 8)
-        c.drawString(margin, 25, "Generated by AIntelli OCR Guest System")
+        c.drawString(margin, 25, "Generated by Guest Information Manager")
         c.drawRightString(w - margin, 25, "Page 1")
 
         c.save()
@@ -874,11 +732,7 @@ def export_pdf():
 # RECORDS
 @app.route("/records")
 def records():
-    files = []
-    if os.path.exists(PDF_FOLDER):
-        files = [f for f in os.listdir(PDF_FOLDER) if f.lower().endswith(".pdf")]
-    files.sort(reverse=True)
-    return render_template("records.html", files=files)
+    return render_template("records.html")
 
 
 @app.route("/view/<path:filename>")

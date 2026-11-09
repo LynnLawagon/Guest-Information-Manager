@@ -10,4 +10,6 @@ backend/static/PDFs/
 
 # OS
 .DS_Store
-Thumbs.db
+Thumbs.db.env
+backend/.env
+*.sqlite3

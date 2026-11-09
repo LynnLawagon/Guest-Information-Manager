@@ -515,7 +515,7 @@ exportBtn.addEventListener("click", async () => {
     try { saveData = JSON.parse(saveText); } catch {}
 
     if (!saveRes.ok) {
-      alert("Database save failed: " + (saveData.error || "DB save failed") + (saveData.details ? (" | " + saveData.details) : ""));
+      alert("Save validation failed: " + (saveData.error || "DB save failed") + (saveData.details ? (" | " + saveData.details) : ""));
       return;
     }
 
@@ -543,7 +543,24 @@ exportBtn.addEventListener("click", async () => {
 
     URL.revokeObjectURL(url);
 
-    alert("Guest saved to database successfully!");
+    const storageKey = "guestInfoManager.records.v1";
+    const savedRecord = {
+      ...payload,
+      age: computeAge(payload.Date_of_birth),
+      created_at: new Date().toISOString(),
+      pdf_filename: `${payload.reference_id}.pdf`
+    };
+    const existing = JSON.parse(localStorage.getItem(storageKey) || "[]");
+    const index = existing.findIndex(item => item.reference_id === savedRecord.reference_id);
+    if (index >= 0) existing[index] = savedRecord;
+    else existing.unshift(savedRecord);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(existing));
+    } catch (storageError) {
+      alert("The PDF was created, but this browser is running out of local storage. Export a backup or remove old records.");
+      return;
+    }
+    alert("Guest record saved on this device and PDF downloaded.");
   } catch (err) {
     alert("Error: " + err.message);
   }

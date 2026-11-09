@@ -2,53 +2,36 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Saved Guest PDFs</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f5f7fb" />
+  <title>Guest Records | Guest Information Manager</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='records.css') }}">
 </head>
 <body>
-
-<div class="page">
-  <div class="card">
-    <div class="header">
-      <h1>Saved Guest PDFs</h1>
-      <p class="sub">Your exported guest PDF files are listed here.</p>
-    </div>
-
-    {% if files and files|length > 0 %}
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Reference ID</th>
-              <th class="col-actions">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for file in files %}
-              <tr>
-                <td class="ref">{{ file.replace(".pdf","") }}</td>
-                <td class="actions">
-                  <a class="btn btn-ghost" href="{{ url_for('view_pdf', filename=file) }}" target="_blank">View</a>
-                  <a class="btn btn-primary" href="{{ url_for('download_pdf', filename=file) }}">Download</a>
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+  <main class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Guest Information Manager home"><span class="brand-mark">G</span><span>Guest Information Manager<small>Personal device workspace</small></span></a>
+      <a class="button button-light" href="/scan-page">＋ New guest</a>
+    </header>
+    <section class="intro">
+      <div><p class="eyebrow">LOCAL RECORDS</p><h1>Guest records</h1><p class="muted">Records saved in this browser on this device.</p></div>
+      <div class="storage-note"><span class="status-dot"></span> Stored locally in this browser</div>
+    </section>
+    <section class="toolbar">
+      <label class="search"><span>⌕</span><input id="search" type="search" placeholder="Search by name or reference number" /></label>
+      <div class="toolbar-actions">
+        <button class="button button-light" id="export-backup">Export backup</button>
+        <label class="button button-light file-button" for="import-backup">Import backup</label><input id="import-backup" type="file" accept="application/json,.json" hidden>
       </div>
-    {% else %}
-      <div class="empty">
-        <div class="empty-title">No PDFs saved yet</div>
-        <div class="empty-sub">Export a guest record first, then it will appear here.</div>
-      </div>
-    {% endif %}
-
-    <div class="footer">
-      <a class="btn btn-primary" href="/scan-page">Back to Scanner</a>
-      <a class="btn btn-ghost" href="/">Back to Home</a>
-    </div>
-  </div>
-</div>
-
+    </section>
+    <section class="stats"><div class="stat-card"><span>Total records</span><strong id="total-count">0</strong></div><div class="stat-card"><span>Latest saved</span><strong id="latest-date">—</strong></div></section>
+    <section class="records-card">
+      <div class="records-heading"><div><h2>Saved guests</h2><p class="muted">Manage, export, or remove records from this device.</p></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Guest</th><th>Reference</th><th>Date saved</th><th class="actions-head">Actions</th></tr></thead><tbody id="records-list"></tbody></table></div>
+      <div class="empty-state" id="empty-state"><div class="empty-icon">▤</div><h3>No guest records yet</h3><p>Scan an ID and save a guest record to see it here.</p><a class="button button-primary" href="/scan-page">Create first record</a></div>
+    </section>
+    <p class="privacy-note">Privacy reminder: Local records are not shared between devices. Export a backup regularly. Clearing browser data may permanently erase these records.</p>
+  </main>
+  <script src="{{ url_for('static', filename='records.js') }}"></script>
 </body>
 </html>
